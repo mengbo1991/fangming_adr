@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<!-- 1. 引入vue -->
+		<script src="./plugins/vue-2.6.14/vue.js"></script>
+		<!-- 2. 引入样式 -->
+		<link rel="stylesheet" href="./plugins/element-ui-2.15.7/theme-chalk/index.css">
+		<!-- 3. 引入组件库 -->
+		<script src="./plugins/element-ui-2.15.7/index.js"></script>
+		<!-- axio -->
+		<script src="./plugins/axio-0.27.2/axios.js"></script>
+		<!-- vant -->
+		<link
+		  rel="stylesheet"
+		  href="https://unpkg.com/vant@2.12/lib/index.css"
+		/>
+		<script src="https://unpkg.com/vant@2.12/lib/vant.min.js"></script>
+		<title>上报</title>
+	</head>
+	<body>
+		<div id="app">
+			<img src="https://adr-banner.oss-cn-hangzhou.aliyuncs.com/fangming/fangming_1.jpg" width="100%" alt=""
+				usemap="#callMap" @load="coordsSet();" />
+			<map name="callMap">
+				<area shape="rect" :coords="telCoords" @click="telCall">
+				<area shape="rect" :coords="phoneCoords" @click="phoneCall">
+			</map>
+			<el-form ref="elForm" :model="formData" :rules="rules" size="medium" label-width="100px" v-if="elFormShow"
+				label-position="top">
+				<el-form-item label="上报人姓名" prop="name">
+					<el-input v-model="formData.name" placeholder="请输入上报人姓名" show-word-limit clearable
+						:style="{width: '100%'}"></el-input>
+				</el-form-item>
+				<el-form-item label="上报人手机号" prop="phone">
+					<el-input v-model="formData.phone" placeholder="请输入上报人手机号" :maxlength="11" clearable
+						:style="{width: '100%'}">
+					</el-input>
+				</el-form-item>
+				<el-form-item label="患者姓名" prop="patientName">
+					<el-input v-model="formData.patientName" placeholder="请输入患者姓名" show-word-limit clearable
+						:style="{width: '100%'}"></el-input>
+				</el-form-item>
+				<el-form-item label="患者性别" prop="gender">
+					<el-radio-group v-model="formData.gender" size="medium">
+						<el-radio v-for="(item, index) in genderOptions" :key="index" :label="item.value"
+							:disabled="item.disabled">{{item.label}}</el-radio>
+					</el-radio-group>
+				</el-form-item>
+				<el-form-item label="药品名称" prop="productName">
+					<el-input v-model="formData.productName" placeholder="请输入药品名称" clearable :style="{width: '100%'}">
+					</el-input>
+				</el-form-item>
+				<el-form-item label="药品批号" prop="batchNo">
+					<el-input v-model="formData.batchNo" placeholder="请输入药品批号" clearable :style="{width: '100%'}">
+					</el-input>
+				</el-form-item>
+				<el-form-item label="疑似不良反应描述" prop="description">
+					<el-input v-model="formData.description" type="textarea" placeholder="请输入疑似不良反应描述，如吃药后10分钟后发热、呕吐等症状"
+						:autosize="{minRows: 4}" :style="{width: '100%'}"></el-input>
+				</el-form-item>
+				<el-form-item label="用药情况" prop="medication">
+					<el-input v-model="formData.medication" type="textarea" placeholder="请输入用药情况"
+						:autosize="{minRows: 4,}" :style="{width: '100%'}"></el-input>
+				</el-form-item>
+				<el-form-item label="是否接受回访" prop="returnVisit">
+					<el-radio-group v-model="formData.returnVisit" size="medium">
+						<el-radio v-for="(item, index) in returnVisitOptions" :key="index" :label="item.value"
+							:disabled="item.disabled">{{item.label}}</el-radio>
+					</el-radio-group>
+				</el-form-item>
+				<el-form-item ali>
+					<el-button type="primary" v-if="submitButtonFlag" @click="submitForm">提交</el-button>
+				</el-form-item>
+			</el-form>
+			<el-row v-if="!elFormShow">
+				<el-col :sm="12" :lg="6">
+					<el-result icon="success" title="提交成功" sub-title="感谢您的反馈">
+					</el-result>
+				</el-col>
+			</el-row>
+			<el-dialog title="提示" :visible.sync="dialogVisible" width="100%">
+				<span>{{errorMsg}}</span>
+				<span slot="footer" class="dialog-footer">
+					<el-button type="primary" @click="dialogVisible = false">确 定</el-button>
+				</span>
+			</el-dialog>
+		</div>
+	</body>
+	<script>
+		new Vue({
+			el: '#app',
+			data() {
+				return {
+					// 屏幕尺寸
+					screenWidth: null,
+					// 控制表单和最后提交成功的显示
+					elFormShow: true,
+					// 提交按钮
+					submitButtonFlag: true,
+					// 弹出层
+					dialogVisible: false,
+					// 400电话
+					telVal: '0530-7205021',
+					// 初始电话坐标
+					telCoords: '',
+					// 手机号
+					phoneVal: '0530-7201536',
+					// 初始手机坐标
+					phoneCoords: '',
+					// API地址
+					apiUrl: 'http://127.0.0.1:8090/system/collect/add',
+					// 错误信息
+					errorMsg: "",
+					// 表单内容
+					formData: {
+						mahCode: 'fangming',
+						name: '',
+						patientName: '',
+						phone: '',
+						gender: '',
+						approvalNo: '',
+						productName: '',
+						batchNo: '',
+						description: '',
+						medication: '',
+						returnVisit: '',
+					},
+					// 填写规则
+					rules: {
+						name: [{
+							required: true,
+							message: '请输入上报人姓名',
+							trigger: 'blur'
+						}],
+						phone: [{
+							required: true,
+							message: '请输入上报人手机号',
+							trigger: 'blur'
+						}, {
+							pattern: /^1(3|4|5|7|8|9)\d{9}$/,
+							message: '手机号格式错误',
+							trigger: 'blur'
+						}],
+						patientName: [{
+							required: true,
+							message: '请输入患者姓名',
+							trigger: 'blur'
+						}],
+						gender: [],
+						productName: [{
+							required: true,
+							message: '请输入药品名称',
+							trigger: 'blur'
+						}],
+						batchNo: [],
+						description: [{
+							required: true,
+							message: '请输入疑似不良反应描述',
+							trigger: 'blur'
+						}],
+						medication: [],
+						returnVisit: [{
+							required: true,
+							message: '请选择是否接受回访',
+							trigger: 'change'
+						}],
+					},
+					genderOptions: [{
+						"label": "男",
+						"value": 1
+					}, {
+						"label": "女",
+						"value": 2
+					}],
+					returnVisitOptions: [{
+						"label": "接受",
+						"value": 1
+					}, {
+						"label": "不接受",
+						"value": 2
+					}],
+				}
+			},
+			methods: {
+				// 提交事件
+				submitForm() {
+					this.$refs['elForm'].validate(valid => {
+						// 验证失败，不进行提交
+						if (!valid) return;
+						const loading = this.$loading({
+							lock: true,
+							text: '提交中……',
+							spinner: 'el-icon-loading',
+							background: 'rgba(0, 0, 0, 0.7)'
+						});
+						axios.post(this.apiUrl,
+							this.formData
+						).then(response => {
+								// 返回结果开始下一步处理
+								loading.close();
+								console.log(response)
+								if (response.data.code == 0) {
+									this.elFormShow = false
+									this.submitButtonFlag = false
+								} else {
+									this.errorMsg = response.data.msg;
+									this.dialogVisible = true;
+								}
+							},
+							error => {
+								loading.close();
+								this.errorMsg = '提交失败，服务器异常！';
+								this.dialogVisible = true;
+							})
+					})
+				},
+				// 电话区域点击事件
+				telCall() {
+					window.location.href = "tel:" + this.telVal;
+				},
+				// 手机号码区域点击事件
+				phoneCall() {
+					window.location.href = "tel:" + this.phoneVal;
+				},
+				// 坐标设置
+				coordsSet() {
+					if(this.screenWidth){
+						console.log(this.screenWidth)
+						this.telCoords = this.coordsCalculation('161,34,271,55');
+						this.phoneCoords = this.coordsCalculation('161,72,269,93');
+					}
+				},
+				// 计算坐标
+				coordsCalculation(coordsVal) {
+					var each = coordsVal.split(",");
+					for (var i = 0; i < each.length; i++) {
+						each[i] = Math.round(parseInt(each[i]) * this.screenWidth / 374).toString();
+					}
+					var newPosition = "";
+					for (var i = 0; i < each.length; i++) {
+						newPosition += each[i];
+						if (i < each.length - 1) {
+							newPosition += ",";
+						}
+					}
+					return newPosition;
+				},
+			},
+			mounted() {
+				this.screenWidth = document.body.clientWidth
+				// 监控屏幕尺寸的变化
+				window.onresize = () => {
+					return (() => {
+						this.screenWidth = document.body.clientWidth
+					})()
+				}
+			},
+			watch: {
+				// 监控屏幕宽度数据
+				screenWidth: {
+					handler: function(val) {
+						this.coordsSet();
+					},
+					immediate: true,
+					deep: true
+				},
+			}
+		})
+	</script>
+</html>
